@@ -1,6 +1,7 @@
 import math
 from pathlib import Path
 import urllib.request
+import time
 
 import torch
 import torch.nn as nn
@@ -117,7 +118,9 @@ def main() -> None:
         model.train()
         train_loss_sum = 0.0
         train_tokens = 0
-        for x, y in train_loader:
+        last_log_t = time.time()
+        total_steps = len(train_loader)
+        for step, (x, y) in enumerate(train_loader, start=1):
             x = x.to(device, non_blocking=True)
             y = y.to(device, non_blocking=True)
  
@@ -126,9 +129,20 @@ def main() -> None:
             loss = criterion(logits.reshape(-1, ds.vocab_size), y.reshape(-1))
             loss.backward()
             optimizer.step()
- 
+
             train_loss_sum += loss.item() * y.numel()
             train_tokens += y.numel()
+
+            now = time.time()
+            if now - last_log_t >= 10.0:
+                avg_loss = train_loss_sum / max(train_tokens, 1)
+                avg_ppl = math.exp(min(avg_loss, 20.0))
+                pct = 100.0 * step / max(total_steps, 1)
+                print(
+                    f"  [train] epoch {epoch}/{epochs} | step {step}/{total_steps} ({pct:.1f}%) | "
+                    f"avg loss {avg_loss:.4f} ppl {avg_ppl:.2f} | tokens {train_tokens}"
+                )
+                last_log_t = now
  
         model.eval()
         test_loss_sum = 0.0
